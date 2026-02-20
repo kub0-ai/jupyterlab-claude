@@ -508,7 +508,14 @@ def _register_magics():
         import random
 
         args = line.strip().split()
-        cmd = args[0].lower() if args else "status"
+        if not args:
+            print("Usage:")
+            print("  %proxy mullvad [idx]  — route via Mullvad proxy pool")
+            print("  %proxy tor            — route via Tor sidecar")
+            print("  %proxy off            — clear proxy, use node IP")
+            print("  %proxy status         — show current proxy and exit IP")
+            return
+        cmd = args[0].lower()
 
         _proxy_vars = [
             "http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY",
