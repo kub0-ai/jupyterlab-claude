@@ -9,6 +9,7 @@ JupyterLab with [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CL
 - **Conversation-per-kernel** — each kernel gets a unique session ID; restart or `%claude_reset` for a fresh conversation
 - **Progress indicator** — animated terminal-style display while Claude thinks
 - **Persistent auth** — credentials stored on PVC, survive pod restarts
+- **Proxy routing** — `%proxy mullvad` / `%proxy tor` for selective VPN/Tor exit
 - **Helm chart** — deploy to any Kubernetes cluster
 
 ## Quick Start
@@ -64,6 +65,21 @@ How do I add a rolling average column?
 %claude_thinking  # Toggle thinking section visibility
 ```
 
+### Proxy Routing
+
+Route notebook and terminal traffic through VPN or Tor exits. Requires `mullvad.enabled` or `tor.enabled` in Helm values.
+
+```python
+%proxy                  # Show usage
+%proxy mullvad          # Random endpoint from proxy pool
+%proxy mullvad 2        # Specific endpoint (0-indexed)
+%proxy tor              # Tor SOCKS5 sidecar
+%proxy off              # Clear proxy, use node IP
+%proxy status           # Show current proxy and exit IP
+```
+
+Shell equivalents available in the terminal: `proxy-mullvad`, `proxy-tor`, `proxy-off`, `proxy-status`.
+
 ## Configuration
 
 See [`chart/values.yaml`](chart/values.yaml) for all configurable values. Key options:
@@ -77,6 +93,9 @@ See [`chart/values.yaml`](chart/values.yaml) for all configurable values. Key op
 | `jupyter.tokenAuth` | `false` | Disable JupyterLab token (use external auth) |
 | `podman.fuseOverlayfs` | `false` | Mount `/dev/fuse` + grant `SYS_ADMIN` for fast Podman image pulls (overlay vs vfs) |
 | `ollama.enabled` | `false` | Enable Ollama integration |
+| `mullvad.enabled` | `false` | Inject `PROXY_URLS` env for `%proxy mullvad` |
+| `mullvad.proxySecretName` | `""` | K8s Secret with key `proxy_urls` (comma-separated HTTP proxy endpoints) |
+| `tor.enabled` | `false` | Add Tor sidecar (SOCKS5 on `127.0.0.1:9050`) for `%proxy tor` |
 | `ingress.enabled` | `false` | Create an Ingress resource |
 
 ## Building the Image
