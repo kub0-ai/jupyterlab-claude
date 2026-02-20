@@ -1,0 +1,165 @@
+/* Mobile-friendly JupyterLab overrides */
+
+/* ===== Narrow viewport (phones, < 768px) ===== */
+@media (max-width: 768px) {
+
+    /* Sidebar: start collapsed but toggleable via JupyterLab's built-in toggle (Ctrl+B) */
+    /* Don't hide it entirely — the file browser long-press menu is needed */
+    #jp-left-stack {
+        width: 65vw !important;
+        max-width: 280px !important;
+    }
+
+    /* Full-width notebook cells */
+    .jp-Notebook {
+        padding: 4px !important;
+    }
+
+    .jp-Cell {
+        padding: 4px 2px !important;
+    }
+
+    /* Larger code font for readability */
+    .jp-Editor .cm-content {
+        font-size: 14px !important;
+        line-height: 1.5 !important;
+    }
+
+    /* Wider toolbar buttons for touch targets (min 44px per Apple HIG) */
+    .jp-Toolbar-item button {
+        min-width: 44px !important;
+        min-height: 44px !important;
+        padding: 8px !important;
+    }
+
+    /* Larger toolbar icons */
+    .jp-Toolbar-item .jp-ToolbarButtonComponent svg {
+        width: 20px !important;
+        height: 20px !important;
+    }
+
+    /* Simplify tab bar — hide close buttons, reduce padding, truncate names */
+    .lm-TabBar-tab {
+        padding: 8px 12px !important;
+        min-height: 40px !important;
+        max-width: 140px !important;
+    }
+
+    .lm-TabBar-tabLabel {
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+        white-space: nowrap !important;
+    }
+
+    .lm-TabBar-tabCloseIcon {
+        display: none !important;
+    }
+
+    /* Context menu (long-press): larger touch targets */
+    .lm-Menu-item {
+        padding: 10px 16px !important;
+        font-size: 15px !important;
+        min-height: 44px !important;
+        line-height: 24px !important;
+    }
+
+    .lm-Menu {
+        min-width: 220px !important;
+    }
+
+    .lm-Menu-itemIcon {
+        width: 24px !important;
+        height: 24px !important;
+        margin-right: 12px !important;
+    }
+
+    .lm-Menu-itemSubmenuIcon {
+        width: 20px !important;
+    }
+
+    /* Menu bar: bigger touch targets */
+    .lm-MenuBar-item {
+        padding: 8px 12px !important;
+        font-size: 15px !important;
+        min-height: 44px !important;
+    }
+
+    /* Scroll active cell into view above soft keyboard */
+    .jp-Notebook .jp-Cell.jp-mod-active {
+        scroll-margin-bottom: 50vh !important;
+    }
+
+    /* Dialog buttons: bigger for touch */
+    .jp-Dialog button {
+        min-height: 44px !important;
+        min-width: 80px !important;
+        padding: 8px 16px !important;
+        font-size: 15px !important;
+    }
+
+    /* Status bar: compact */
+    .jp-StatusBar {
+        font-size: 11px !important;
+    }
+
+    /* File browser items: taller rows for touch */
+    .jp-DirListing-item {
+        min-height: 40px !important;
+        padding: 4px 8px !important;
+    }
+}
+
+/* ===== Tablet (768px - 1024px) ===== */
+@media (min-width: 769px) and (max-width: 1024px) {
+
+    /* Narrower sidebar */
+    #jp-left-stack {
+        width: 200px !important;
+    }
+
+    /* Slightly larger touch targets */
+    .lm-Menu-item {
+        padding: 8px 14px !important;
+        min-height: 40px !important;
+    }
+
+    .jp-Toolbar-item button {
+        min-width: 40px !important;
+        min-height: 40px !important;
+    }
+}
+
+/* ===== Touch device hints (all sizes) ===== */
+@media (pointer: coarse) {
+
+    /* Ensure notebook cells, editors, outputs all support long-press context menu */
+    .jp-Cell,
+    .jp-Editor,
+    .jp-OutputArea,
+    .jp-RenderedMarkdown,
+    .jp-DirListing,
+    .jp-SideBar {
+        -webkit-touch-callout: default !important;
+        touch-action: auto !important;
+        -webkit-user-select: text !important;
+        user-select: text !important;
+    }
+
+    /* Prevent accidental text selection only on toolbar buttons (not content) */
+    .jp-Toolbar-item button,
+    .lm-MenuBar-item {
+        -webkit-user-select: none !important;
+        user-select: none !important;
+    }
+
+    /* Larger scrollbar for touch */
+    ::-webkit-scrollbar {
+        width: 12px !important;
+        height: 12px !important;
+    }
+
+    ::-webkit-scrollbar-thumb {
+        border-radius: 6px !important;
+        min-height: 48px !important;
+    }
+}

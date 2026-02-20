@@ -1,0 +1,12 @@
+{
+    "@jupyterlab/apputils-extension:themes": {
+        "theme": "JupyterLab Dark"
+    },
+    "@jupyterlab/filebrowser-extension:browser": {
+        "navigateToCurrentDirectory": true
+    },
+    "@jupyterlab/terminal-extension:plugin": {
+        "fontSize": 14,
+        "theme": "dark"
+    }
+}

@@ -1,0 +1,184 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "jupyterlab-claude.fullname" . }}
+  labels:
+    {{- include "jupyterlab-claude.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "jupyterlab-claude.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "jupyterlab-claude.selectorLabels" . | nindent 8 }}
+    spec:
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: jupyterlab
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- if or .Values.containerSecurityContext .Values.podman.fuseOverlayfs }}
+          securityContext:
+            {{- if .Values.podman.fuseOverlayfs }}
+            capabilities:
+              add:
+                - SYS_ADMIN
+            {{- end }}
+            {{- with .Values.containerSecurityContext }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- end }}
+          ports:
+            - name: http
+              containerPort: 8888
+          env:
+            - name: JUPYTER_ENABLE_LAB
+              value: "yes"
+            - name: CLAUDE_CONFIG_DIR
+              value: {{ .Values.claude.configDir | quote }}
+            {{- if .Values.git.name }}
+            - name: GIT_USER_NAME
+              value: {{ .Values.git.name | quote }}
+            {{- end }}
+            {{- if .Values.git.email }}
+            - name: GIT_USER_EMAIL
+              value: {{ .Values.git.email | quote }}
+            {{- end }}
+            {{- if .Values.ollama.enabled }}
+            - name: OLLAMA_HOST
+              value: {{ .Values.ollama.host | quote }}
+            {{- end }}
+          lifecycle:
+            postStart:
+              exec:
+                command:
+                  - /bin/bash
+                  - -c
+                  - |
+                    # Claude: write bypassPermissions settings if not present
+                    mkdir -p "${CLAUDE_CONFIG_DIR}"
+                    {{- if .Values.claude.bypassPermissions }}
+                    if [ ! -f "${CLAUDE_CONFIG_DIR}/settings.json" ]; then
+                      printf '{"permissions":{"defaultMode":"bypassPermissions"}}\n' > "${CLAUDE_CONFIG_DIR}/settings.json"
+                    fi
+                    {{- end }}
+                    # Git: apply credential config from secret
+                    {{- if .Values.git.credentialSecretName }}
+                    if [ -f /etc/git-credentials/gitconfig ]; then
+                      cp /etc/git-credentials/gitconfig /home/jovyan/.gitconfig
+                    fi
+                    if [ -f /etc/git-credentials/git-credentials ]; then
+                      cp /etc/git-credentials/git-credentials /home/jovyan/.git-credentials
+                      chmod 600 /home/jovyan/.git-credentials
+                    fi
+                    {{- end }}
+                    # Git: apply user identity (overrides secret's [user] section if both set)
+                    if [ -n "${GIT_USER_NAME:-}" ]; then
+                      git config --global user.name "${GIT_USER_NAME}"
+                    fi
+                    if [ -n "${GIT_USER_EMAIL:-}" ]; then
+                      git config --global user.email "${GIT_USER_EMAIL}"
+                    fi
+                    # Git: set up SSH key
+                    {{- if .Values.git.sshKeySecretName }}
+                    if [ -f /etc/git-ssh/id_rsa ]; then
+                      mkdir -p /home/jovyan/.ssh
+                      chmod 700 /home/jovyan/.ssh
+                      cp /etc/git-ssh/id_rsa /home/jovyan/.ssh/id_rsa
+                      chmod 600 /home/jovyan/.ssh/id_rsa
+                      printf 'Host *\n  StrictHostKeyChecking accept-new\n  IdentityFile /home/jovyan/.ssh/id_rsa\n' >> /home/jovyan/.ssh/config
+                    fi
+                    {{- end }}
+                    # Podman: configure registry auth if not already set up
+                    {{- if .Values.podman.registryAuthSecretName }}
+                    if [ -f /etc/podman-auth/auth.json ] && [ ! -f /home/jovyan/.config/containers/auth.json ]; then
+                      mkdir -p /home/jovyan/.config/containers
+                      cp /etc/podman-auth/auth.json /home/jovyan/.config/containers/auth.json
+                    fi
+                    {{- end }}
+          args:
+            - start-notebook.py
+            - --ServerApp.base_url={{ .Values.jupyter.baseUrl }}
+            - --ServerApp.allow_origin={{ .Values.jupyter.allowOrigin }}
+            - --ServerApp.trust_xheaders={{ .Values.jupyter.trustXheaders }}
+            {{- if not .Values.jupyter.tokenAuth }}
+            - --IdentityProvider.token=
+            {{- end }}
+          {{- if or .Values.persistence.enabled .Values.podman.fuseOverlayfs .Values.git.credentialSecretName .Values.git.sshKeySecretName .Values.podman.registryAuthSecretName }}
+          volumeMounts:
+            {{- if .Values.persistence.enabled }}
+            - name: data
+              mountPath: /home/jovyan/work
+            {{- end }}
+            {{- if .Values.podman.fuseOverlayfs }}
+            - name: dev-fuse
+              mountPath: /dev/fuse
+            {{- end }}
+            {{- if .Values.git.credentialSecretName }}
+            - name: git-credentials
+              mountPath: /etc/git-credentials
+              readOnly: true
+            {{- end }}
+            {{- if .Values.git.sshKeySecretName }}
+            - name: git-ssh
+              mountPath: /etc/git-ssh
+              readOnly: true
+            {{- end }}
+            {{- if .Values.podman.registryAuthSecretName }}
+            - name: podman-auth
+              mountPath: /etc/podman-auth
+              readOnly: true
+            {{- end }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: {{ .Values.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.liveness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.liveness.failureThreshold }}
+          readinessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.readiness.timeoutSeconds }}
+      {{- if or .Values.persistence.enabled .Values.podman.fuseOverlayfs .Values.git.credentialSecretName .Values.git.sshKeySecretName .Values.podman.registryAuthSecretName }}
+      volumes:
+        {{- if .Values.persistence.enabled }}
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ .Values.persistence.existingClaim | default (printf "%s-data" (include "jupyterlab-claude.fullname" .)) }}
+        {{- end }}
+        {{- if .Values.podman.fuseOverlayfs }}
+        - name: dev-fuse
+          hostPath:
+            path: /dev/fuse
+            type: CharDevice
+        {{- end }}
+        {{- if .Values.git.credentialSecretName }}
+        - name: git-credentials
+          secret:
+            secretName: {{ .Values.git.credentialSecretName }}
+        {{- end }}
+        {{- if .Values.git.sshKeySecretName }}
+        - name: git-ssh
+          secret:
+            secretName: {{ .Values.git.sshKeySecretName }}
+            defaultMode: 0400
+        {{- end }}
+        {{- if .Values.podman.registryAuthSecretName }}
+        - name: podman-auth
+          secret:
+            secretName: {{ .Values.podman.registryAuthSecretName }}
+        {{- end }}
+      {{- end }}

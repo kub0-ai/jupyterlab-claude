@@ -1,0 +1,117 @@
+## JupyterLab + Claude Code Helm values
+
+image:
+  repository: ghcr.io/kub0-ai/jupyterlab-claude
+  tag: latest
+  pullPolicy: Always
+
+imagePullSecrets: []
+#  - name: ghcr-pull-secret
+
+nameOverride: ""
+fullnameOverride: ""
+
+replicaCount: 1
+
+## Claude Code configuration
+claude:
+  # Directory where Claude stores credentials (persisted to PVC)
+  configDir: /home/jovyan/work/.claude
+  # Write bypassPermissions on startup — recommended in container environments
+  bypassPermissions: true
+
+## Git configuration
+## Git refuses to commit without user.name and user.email — most servers now enforce this
+git:
+  name: ""   # git config user.name (required for commits)
+  email: ""  # git config user.email (required for commits)
+  # K8s Secret with key "gitconfig" — full ~/.gitconfig including credential sections
+  # Useful for HTTPS token auth against any server (Forgejo, GitHub, GitLab, etc.)
+  # If set alongside name/email, name/email still override the [user] section
+  credentialSecretName: ""
+  # K8s Secret with key "id_rsa" — SSH private key
+  # Works with any server that has the public key registered
+  sshKeySecretName: ""
+
+## Podman-in-pod configuration
+podman:
+  # Use fuse-overlayfs instead of vfs (requires /dev/fuse on host)
+  # Dramatically faster image pulls — overlay dedup vs full-copy per layer
+  # Grants SYS_ADMIN capability to the container
+  fuseOverlayfs: false
+  # K8s Secret with key "auth.json" — Podman/Docker registry auth config
+  # Format: {"auths":{"ghcr.io":{"auth":"base64(user:token)"}}}
+  # Copied to ~/.config/containers/auth.json on startup if not already present
+  registryAuthSecretName: ""
+
+## Ollama integration (Phase 2)
+ollama:
+  enabled: false
+  host: http://ollama.inference.svc.cluster.local:11434
+
+## JupyterLab server configuration
+jupyter:
+  # Base URL for JupyterLab
+  baseUrl: /
+  # Allow cross-origin requests (needed behind reverse proxy)
+  allowOrigin: "*"
+  # Trust X-Forwarded headers from reverse proxy
+  trustXheaders: true
+  # Disable token auth (use external auth like OAuth2 Proxy instead)
+  tokenAuth: false
+
+## Persistent storage for notebooks and Claude credentials
+persistence:
+  enabled: true
+  storageClass: ""
+  size: 20Gi
+  accessMode: ReadWriteOnce
+  # Use existing PVC instead of creating one
+  existingClaim: ""
+
+## Resource limits
+resources:
+  requests:
+    cpu: 200m
+    memory: 512Mi
+  limits:
+    cpu: "4"
+    memory: 8Gi
+
+## Pod security context
+podSecurityContext:
+  fsGroup: 100
+
+## Container security context (for rootless Podman support)
+containerSecurityContext: {}
+
+## Service
+service:
+  type: ClusterIP
+  port: 8888
+
+## Ingress
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  #  traefik.ingress.kubernetes.io/router.entrypoints: websecure
+  #  cert-manager.io/cluster-issuer: letsencrypt-prod
+  host: ""
+  tls: []
+  #  - hosts:
+  #      - jupyter.example.com
+  #    secretName: jupyter-tls
+
+## Liveness and readiness probes
+## Uses tcpSocket because JupyterLab returns 403 on /api/status when token auth is disabled
+probes:
+  liveness:
+    initialDelaySeconds: 30
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 5
+  readiness:
+    initialDelaySeconds: 15
+    periodSeconds: 10
+    timeoutSeconds: 5

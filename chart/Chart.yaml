@@ -1,0 +1,17 @@
+apiVersion: v2
+name: jupyterlab-claude
+description: JupyterLab with Claude Code CLI and IPython magic integration
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - jupyter
+  - jupyterlab
+  - claude
+  - ai
+  - notebook
+home: https://github.com/kub0-ai/jupyterlab-claude
+sources:
+  - https://github.com/kub0-ai/jupyterlab-claude
+maintainers:
+  - name: jkubo

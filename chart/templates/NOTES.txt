@@ -1,0 +1,23 @@
+JupyterLab + Claude Code has been deployed.
+
+{{- if .Values.ingress.enabled }}
+
+Access JupyterLab at: https://{{ .Values.ingress.host }}
+{{- else }}
+
+To access JupyterLab, run:
+  kubectl port-forward svc/{{ include "jupyterlab-claude.fullname" . }} 8888:{{ .Values.service.port }} -n {{ .Release.Namespace }}
+  Then open http://localhost:8888
+{{- end }}
+
+First-time setup:
+  1. Open a Terminal tab in JupyterLab (File > New > Terminal)
+  2. Run: claude
+  3. Follow the authentication prompts
+
+Once authenticated, use Claude in any notebook:
+  ask("your question here")    # recommended
+  %claude your question        # line magic
+  %%claude                     # cell magic (multi-line)
+  %claude_reset                # start fresh conversation
+  %claude_status               # show session info

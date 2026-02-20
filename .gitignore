@@ -1,0 +1,19 @@
+# Helm
+chart/charts/
+chart/*.tgz
+
+# Local cluster overrides — never commit these (may contain internal hostnames, secret names)
+values.local.yaml
+values-*.local.yaml
+*.local.yaml
+
+# Docker
+docker/*.pyc
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
