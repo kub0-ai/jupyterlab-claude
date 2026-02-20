@@ -103,6 +103,30 @@ ingress:
   #      - jupyter.example.com
   #    secretName: jupyter-tls
 
+## Mullvad VPN proxy pool
+## Injects PROXY_URLS env var from a K8s secret (same format as cctv-proxy-config).
+## Use %proxy mullvad in notebooks or proxy-mullvad in terminal.
+mullvad:
+  enabled: false
+  # K8s Secret with key "proxy_urls" — comma-separated HTTP proxy endpoints
+  # Reuse existing cctv-proxy-config: kubectl get secret cctv-proxy-config -n networking
+  proxySecretName: ""
+
+## Tor exit node sidecar
+## Runs tor-gateway alongside JupyterLab, exposes SOCKS5 on 127.0.0.1:9050.
+## No iptables killswitch — only routes traffic explicitly sent through the proxy.
+## Use %proxy tor in notebooks or proxy-tor in terminal.
+tor:
+  enabled: false
+  image: ghcr.io/kub0-ai/tor-gateway:latest
+  resources:
+    requests:
+      memory: 128Mi
+      cpu: 50m
+    limits:
+      memory: 256Mi
+      cpu: 200m
+
 ## Liveness and readiness probes
 ## Uses tcpSocket because JupyterLab returns 403 on /api/status when token auth is disabled
 probes:

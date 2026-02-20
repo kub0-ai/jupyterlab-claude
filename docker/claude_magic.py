@@ -495,6 +495,124 @@ def _register_magics():
         print(f"Version: {version} ({tag})")
         print(f"Build:   {sha}")
 
+    @register_line_magic
+    def proxy(line):
+        """Route traffic through Mullvad or Tor: %proxy [mullvad [index] | tor | off | status]
+
+        %proxy mullvad        — random endpoint from PROXY_URLS pool
+        %proxy mullvad 2      — specific endpoint (0-indexed)
+        %proxy tor            — Tor SOCKS5 sidecar (requires tor.enabled=true)
+        %proxy off            — clear proxy, use node IP
+        %proxy status         — show current proxy and exit IP
+        """
+        import random
+
+        args = line.strip().split()
+        cmd = args[0].lower() if args else "status"
+
+        _proxy_vars = [
+            "http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY",
+            "all_proxy", "ALL_PROXY",
+        ]
+
+        def _clear_proxy():
+            for var in _proxy_vars:
+                os.environ.pop(var, None)
+
+        def _get_exit_ip(proxy_url=None):
+            try:
+                curl_cmd = ["curl", "-s", "--max-time", "10"]
+                if proxy_url:
+                    curl_cmd += ["--proxy", proxy_url]
+                curl_cmd.append("https://api64.ipify.org")
+                result = subprocess.run(curl_cmd, capture_output=True, text=True, timeout=15)
+                return result.stdout.strip() if result.returncode == 0 else "unavailable"
+            except Exception:
+                return "unavailable"
+
+        if cmd == "mullvad":
+            proxy_urls_raw = os.environ.get("PROXY_URLS", "")
+            if not proxy_urls_raw:
+                print("No PROXY_URLS configured. Set mullvad.proxySecretName in Helm values.")
+                return
+            endpoints = [u.strip() for u in proxy_urls_raw.split(",") if u.strip()]
+            if not endpoints:
+                print("PROXY_URLS is empty.")
+                return
+
+            if len(args) > 1:
+                try:
+                    idx = int(args[1])
+                    if idx < 0 or idx >= len(endpoints):
+                        print(f"Index out of range. Available: 0-{len(endpoints) - 1}")
+                        return
+                except ValueError:
+                    print(f"Invalid index: {args[1]}")
+                    return
+            else:
+                idx = random.randrange(len(endpoints))
+
+            proxy_url = endpoints[idx]
+            _clear_proxy()
+            os.environ["http_proxy"] = proxy_url
+            os.environ["https_proxy"] = proxy_url
+            os.environ["HTTP_PROXY"] = proxy_url
+            os.environ["HTTPS_PROXY"] = proxy_url
+            print(f"→ Mullvad [{idx}/{len(endpoints) - 1}]: {proxy_url}")
+            print(f"  Checking exit IP...", end=" ", flush=True)
+            print(_get_exit_ip(proxy_url))
+
+        elif cmd == "tor":
+            tor_proxy = "socks5h://127.0.0.1:9050"
+            print("  Connecting to Tor...", end=" ", flush=True)
+            try:
+                check = subprocess.run(
+                    ["curl", "-s", "--max-time", "10", "--proxy", tor_proxy,
+                     "https://check.torproject.org/api/ip"],
+                    capture_output=True, text=True, timeout=15,
+                )
+            except Exception as e:
+                print(f"\nTor sidecar not reachable: {e}")
+                print("Enable with: tor.enabled=true in Helm values, then redeploy.")
+                return
+
+            if check.returncode != 0:
+                print("\nTor sidecar not reachable on 127.0.0.1:9050")
+                print("Enable with: tor.enabled=true in Helm values, then redeploy.")
+                return
+
+            _clear_proxy()
+            os.environ["all_proxy"] = tor_proxy
+            os.environ["ALL_PROXY"] = tor_proxy
+
+            try:
+                tor_info = json.loads(check.stdout)
+                ip = tor_info.get("IP", "unknown")
+                is_tor = tor_info.get("IsTor", False)
+                print(f"{ip} ({'Tor confirmed' if is_tor else 'not confirmed as Tor'})")
+            except (json.JSONDecodeError, Exception):
+                print(_get_exit_ip(tor_proxy))
+
+            print(f"→ Tor: {tor_proxy}")
+
+        elif cmd == "off":
+            _clear_proxy()
+            print(f"→ Proxy cleared.  Exit IP: {_get_exit_ip()}")
+
+        elif cmd == "status":
+            current = (os.environ.get("http_proxy") or os.environ.get("HTTP_PROXY") or
+                       os.environ.get("all_proxy") or os.environ.get("ALL_PROXY"))
+            label = current if current else "none (direct)"
+            print(f"→ Proxy:   {label}")
+            print(f"  Exit IP: {_get_exit_ip(current)}")
+
+        else:
+            print("Usage:")
+            print("  %proxy mullvad [idx]  — route via Mullvad proxy pool")
+            print("  %proxy tor            — route via Tor (requires tor.enabled=true)")
+            print("  %proxy off            — clear proxy, use node IP")
+            print("  %proxy status         — show current proxy and exit IP")
+
 
 # Register on import
 _register_magics()

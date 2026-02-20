@@ -55,6 +55,13 @@ spec:
             - name: OLLAMA_HOST
               value: {{ .Values.ollama.host | quote }}
             {{- end }}
+            {{- if and .Values.mullvad.enabled .Values.mullvad.proxySecretName }}
+            - name: PROXY_URLS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.mullvad.proxySecretName }}
+                  key: proxy_urls
+            {{- end }}
           lifecycle:
             postStart:
               exec:
@@ -152,6 +159,23 @@ spec:
             initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds }}
             periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
             timeoutSeconds: {{ .Values.probes.readiness.timeoutSeconds }}
+        {{- if .Values.tor.enabled }}
+        - name: tor
+          image: {{ .Values.tor.image }}
+          securityContext:
+            runAsUser: 0
+          ports:
+            - containerPort: 9050
+              name: socks
+          resources:
+            {{- toYaml .Values.tor.resources | nindent 12 }}
+          livenessProbe:
+            tcpSocket:
+              port: 9050
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+        {{- end }}
       {{- if or .Values.persistence.enabled .Values.podman.fuseOverlayfs .Values.git.credentialSecretName .Values.git.sshKeySecretName .Values.podman.registryAuthSecretName }}
       volumes:
         {{- if .Values.persistence.enabled }}

@@ -83,12 +83,19 @@ RUN mkdir -p /home/jovyan/.config/containers
 COPY podman-storage-init.sh /usr/local/bin/podman-storage-init.sh
 RUN chmod +x /usr/local/bin/podman-storage-init.sh
 
+# Proxy helpers — proxy-mullvad, proxy-tor, proxy-off, proxy-status
+COPY proxy-helpers.sh /usr/local/bin/proxy-helpers.sh
+RUN chmod +x /usr/local/bin/proxy-helpers.sh
+
 # Alias: docker → podman (for muscle memory / scripts expecting docker CLI)
 # Auto-detect storage driver on first terminal open
+# Source proxy helpers for Mullvad/Tor routing
 RUN echo 'alias docker=podman' >> /home/jovyan/.bashrc && \
     echo 'alias docker-compose="podman compose"' >> /home/jovyan/.bashrc && \
     echo '# Auto-configure Podman storage on first shell' >> /home/jovyan/.bashrc && \
-    echo 'podman-storage-init.sh 2>/dev/null' >> /home/jovyan/.bashrc
+    echo 'podman-storage-init.sh 2>/dev/null' >> /home/jovyan/.bashrc && \
+    echo '# Proxy helpers: proxy-mullvad, proxy-tor, proxy-off, proxy-status' >> /home/jovyan/.bashrc && \
+    echo 'source /usr/local/bin/proxy-helpers.sh' >> /home/jovyan/.bashrc
 
 # Ensure jovyan owns everything
 RUN chown -R jovyan:users /home/jovyan/.ipython /home/jovyan/.jupyter \
