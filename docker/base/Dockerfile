@@ -79,6 +79,7 @@ RUN chown -R jovyan:jovyan \
     /home/jovyan/.config
 
 ENV PATH="/home/jovyan/.local/bin:$PATH"
+ENV SHELL=/bin/bash
 
 USER jovyan
 WORKDIR /home/jovyan
