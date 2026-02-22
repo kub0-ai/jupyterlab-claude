@@ -10,14 +10,14 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  build-amd64:
     runs-on: docker
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+      version_tag: ${{ steps.tag.outputs.version_tag }}
+      version: ${{ steps.tag.outputs.version }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+      - uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -43,18 +43,80 @@ jobs:
           fi
           echo "version=$(cat VERSION)" >> $GITHUB_OUTPUT
 
-      - name: Build and push
+      - name: Build and push (amd64)
         uses: docker/build-push-action@v6
         with:
           context: ./docker
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           push: true
-          tags: |
-            ghcr.io/kub0-ai/jupyterlab-claude:${{ steps.tag.outputs.tag }}
-            ghcr.io/kub0-ai/jupyterlab-claude:${{ steps.tag.outputs.version_tag }}
-            ghcr.io/kub0-ai/jupyterlab-claude:${{ github.sha }}
+          tags: ghcr.io/kub0-ai/jupyterlab-claude:amd64-${{ github.sha }}
           build-args: |
             GIT_SHA=${{ github.sha }}
             IMAGE_TAG=${{ steps.tag.outputs.tag }}
             VERSION=${{ steps.tag.outputs.version }}
-          cache-from: type=registry,ref=ghcr.io/kub0-ai/jupyterlab-claude:buildcache
+
+  build-arm64:
+    runs-on: arm64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: network=host
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ secrets.GHCR_USERNAME }}
+          password: ${{ secrets.GHCR_TOKEN }}
+
+      - name: Set image tags
+        id: tag
+        run: |
+          if [ "${{ github.ref_name }}" = "main" ]; then
+            echo "tag=latest" >> $GITHUB_OUTPUT
+            echo "version_tag=${{ github.run_number }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+            echo "version_tag=${{ github.ref_name }}-${{ github.run_number }}" >> $GITHUB_OUTPUT
+          fi
+          echo "version=$(cat VERSION)" >> $GITHUB_OUTPUT
+
+      - name: Build and push (arm64)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./docker
+          platforms: linux/arm64
+          push: true
+          tags: ghcr.io/kub0-ai/jupyterlab-claude:arm64-${{ github.sha }}
+          build-args: |
+            GIT_SHA=${{ github.sha }}
+            IMAGE_TAG=${{ steps.tag.outputs.tag }}
+            VERSION=${{ steps.tag.outputs.version }}
+
+  merge:
+    needs: [build-amd64, build-arm64]
+    runs-on: docker
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: network=host
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ secrets.GHCR_USERNAME }}
+          password: ${{ secrets.GHCR_TOKEN }}
+
+      - name: Create multi-arch manifest
+        run: |
+          docker buildx imagetools create \
+            --tag ghcr.io/kub0-ai/jupyterlab-claude:${{ needs.build-amd64.outputs.tag }} \
+            --tag ghcr.io/kub0-ai/jupyterlab-claude:${{ needs.build-amd64.outputs.version_tag }} \
+            --tag ghcr.io/kub0-ai/jupyterlab-claude:${{ github.sha }} \
+            ghcr.io/kub0-ai/jupyterlab-claude:amd64-${{ github.sha }} \
+            ghcr.io/kub0-ai/jupyterlab-claude:arm64-${{ github.sha }}
