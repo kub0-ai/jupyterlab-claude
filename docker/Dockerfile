@@ -37,3 +37,4 @@ RUN chown -R jovyan:jovyan \
 USER jovyan
 WORKDIR /home/jovyan
 EXPOSE 8888
+
