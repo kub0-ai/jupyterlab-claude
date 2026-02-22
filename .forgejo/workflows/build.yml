@@ -4,7 +4,9 @@ on:
   push:
     branches: [main, dev]
     paths:
-      - 'docker/**'
+      - 'docker/Dockerfile'
+      - 'docker/claude_magic.py'
+      - 'docker/00-claude.py'
   workflow_dispatch:
 
 jobs:
@@ -29,13 +31,15 @@ jobs:
           username: ${{ secrets.GHCR_USERNAME }}
           password: ${{ secrets.GHCR_TOKEN }}
 
-      - name: Set image tag and version
+      - name: Set image tags
         id: tag
         run: |
           if [ "${{ github.ref_name }}" = "main" ]; then
             echo "tag=latest" >> $GITHUB_OUTPUT
+            echo "version_tag=${{ github.run_number }}" >> $GITHUB_OUTPUT
           else
             echo "tag=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+            echo "version_tag=${{ github.ref_name }}-${{ github.run_number }}" >> $GITHUB_OUTPUT
           fi
           echo "version=$(cat VERSION)" >> $GITHUB_OUTPUT
 
@@ -47,6 +51,7 @@ jobs:
           push: true
           tags: |
             ghcr.io/kub0-ai/jupyterlab-claude:${{ steps.tag.outputs.tag }}
+            ghcr.io/kub0-ai/jupyterlab-claude:${{ steps.tag.outputs.version_tag }}
             ghcr.io/kub0-ai/jupyterlab-claude:${{ github.sha }}
           build-args: |
             GIT_SHA=${{ github.sha }}
