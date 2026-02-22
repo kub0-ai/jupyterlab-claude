@@ -1,8 +1,9 @@
 # syntax=docker/dockerfile:1
-FROM quay.io/jupyter/scipy-notebook:latest
+# Conda-free JupyterLab: python:3.14.3-slim-bookworm + uv + Claude + Gemini
+FROM python:3.14.3-slim-bookworm
 
 LABEL org.opencontainers.image.source="https://github.com/kub0-ai/jupyterlab-claude"
-LABEL org.opencontainers.image.description="JupyterLab with Claude Code CLI and IPython magic"
+LABEL org.opencontainers.image.description="Conda-free JupyterLab with Claude & Gemini agents"
 LABEL org.opencontainers.image.licenses="MIT"
 
 ARG GIT_SHA=unknown
@@ -14,27 +15,17 @@ ENV IMAGE_SHA=$GIT_SHA
 ENV IMAGE_TAG=$IMAGE_TAG
 ENV IMAGE_VERSION=$VERSION
 
+# uv — fast, telemetry-free Python package manager
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
+
 USER root
 
-# System packages: dev tools + container runtime
+# System packages: dev tools, math libs (needed by scipy/numpy wheel builds), container runtime
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        tmux \
-        vim \
-        jq \
-        make \
-        podman \
-        fuse-overlayfs \
-        slirp4netns \
-        uidmap \
-        git \
-        curl \
-        ca-certificates \
-        gnupg \
+        tmux vim jq make git curl ca-certificates gnupg \
+        build-essential libopenblas-dev liblapack-dev gfortran \
+        podman fuse-overlayfs slirp4netns uidmap \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
-
-# Podman rootless: subuid/subgid ranges for jovyan (UID 1000)
-RUN usermod --add-subuids 100000-165535 jovyan && \
-    usermod --add-subgids 100000-165535 jovyan
 
 # kubectl
 RUN curl -fsSL "https://dl.k8s.io/release/$(curl -fsSL https://dl.k8s.io/release/stable.txt)/bin/linux/$(dpkg --print-architecture)/kubectl" \
@@ -44,41 +35,53 @@ RUN curl -fsSL "https://dl.k8s.io/release/$(curl -fsSL https://dl.k8s.io/release
 # helm
 RUN curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
 
-# Node.js 22 (required by Claude Code CLI)
+# Node.js 22 (required by Claude Code and Gemini CLI)
 RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
     apt-get install -y --no-install-recommends nodejs && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Claude Code CLI
-RUN npm install -g @anthropic-ai/claude-code
+# Claude Code + Gemini CLI
+RUN npm install -g @anthropic-ai/claude-code @google/gemini-cli
 
-# Python packages
-RUN pip install --no-cache-dir ollama
+# jovyan user (standard Jupyter container user, UID/GID 1000)
+RUN useradd -m -s /bin/bash -u 1000 jovyan && \
+    usermod --add-subuids 100000-165535 jovyan && \
+    usermod --add-subgids 100000-165535 jovyan
 
-# IPython magic for %claude / %%claude
+# Python stack via uv — replaces the massive scipy-notebook conda layer
+# Runs as root so --system can write to /usr/local/lib/python3.14/site-packages
+RUN uv pip install --system --no-cache \
+    jupyterlab \
+    scipy \
+    pandas \
+    matplotlib \
+    numpy \
+    ollama \
+    ipykernel
+
+# IPython magic for %claude / %%claude / ask()
+RUN mkdir -p /opt/ai
 COPY claude_magic.py /opt/ai/claude_magic.py
-
-# Auto-load magic on kernel start
 RUN mkdir -p /home/jovyan/.ipython/profile_default/startup
 COPY 00-claude.py /home/jovyan/.ipython/profile_default/startup/00-claude.py
 
-# Mobile-friendly custom CSS for JupyterLab 4
-# Inject <link> tag directly into Lab's index.html (only reliable method for Lab 4)
-COPY custom.css /opt/conda/share/jupyter/lab/static/custom.css
-COPY longpress.js /opt/conda/share/jupyter/lab/static/longpress.js
+# Mobile-friendly custom CSS + longpress.js
+# With system Python (sys.prefix=/usr/local), Lab static files are at:
+# /usr/local/share/jupyter/lab/static/ — same pattern as /opt/conda/share/...
+COPY custom.css /usr/local/share/jupyter/lab/static/custom.css
+COPY longpress.js /usr/local/share/jupyter/lab/static/longpress.js
 RUN sed -i 's|</head>|<link rel="stylesheet" href="{{page_config.fullStaticUrl}}/custom.css">\n<script src="{{page_config.fullStaticUrl}}/longpress.js"></script>\n</head>|' \
-    /opt/conda/share/jupyter/lab/static/index.html
+    /usr/local/share/jupyter/lab/static/index.html
 
-# Also place in classic notebook path (for /tree view)
+# Classic notebook path (for /tree view)
 RUN mkdir -p /home/jovyan/.jupyter/custom
 COPY custom.css /home/jovyan/.jupyter/custom/custom.css
 
 # JupyterLab overrides (theme, terminal settings)
-COPY overrides.json /opt/conda/share/jupyter/lab/settings/overrides.json
+RUN mkdir -p /usr/local/share/jupyter/lab/settings
+COPY overrides.json /usr/local/share/jupyter/lab/settings/overrides.json
 
-# Podman: rootless config — auto-detect fuse-overlayfs, fall back to vfs
-# When /dev/fuse is mounted (via Helm podman.fuseOverlayfs=true), uses overlay for fast pulls
-# Without /dev/fuse, falls back to vfs (slow but works without privileges)
+# Podman rootless: auto-detect fuse-overlayfs, fall back to vfs
 RUN mkdir -p /home/jovyan/.config/containers
 COPY podman-storage-init.sh /usr/local/bin/podman-storage-init.sh
 RUN chmod +x /usr/local/bin/podman-storage-init.sh
@@ -87,18 +90,24 @@ RUN chmod +x /usr/local/bin/podman-storage-init.sh
 COPY proxy-helpers.sh /usr/local/bin/proxy-helpers.sh
 RUN chmod +x /usr/local/bin/proxy-helpers.sh
 
-# Alias: docker → podman (for muscle memory / scripts expecting docker CLI)
-# Auto-detect storage driver on first terminal open
-# Source proxy helpers for Mullvad/Tor routing
+# Shell aliases + startup hooks
 RUN echo 'alias docker=podman' >> /home/jovyan/.bashrc && \
     echo 'alias docker-compose="podman compose"' >> /home/jovyan/.bashrc && \
+    echo 'alias gemini-flash="gemini -m gemini-2.5-flash"' >> /home/jovyan/.bashrc && \
     echo '# Auto-configure Podman storage on first shell' >> /home/jovyan/.bashrc && \
     echo 'podman-storage-init.sh 2>/dev/null' >> /home/jovyan/.bashrc && \
     echo '# Proxy helpers: proxy-mullvad, proxy-tor, proxy-off, proxy-status' >> /home/jovyan/.bashrc && \
     echo 'source /usr/local/bin/proxy-helpers.sh' >> /home/jovyan/.bashrc
 
-# Ensure jovyan owns everything
-RUN chown -R jovyan:users /home/jovyan/.ipython /home/jovyan/.jupyter \
-        /home/jovyan/.config /opt/ai
+# Ownership — jovyan:jovyan, no 'users' group in slim images
+RUN chown -R jovyan:jovyan \
+    /home/jovyan/.ipython \
+    /home/jovyan/.jupyter \
+    /home/jovyan/.config \
+    /opt/ai
+
+ENV PATH="/home/jovyan/.local/bin:$PATH"
 
 USER jovyan
+WORKDIR /home/jovyan
+EXPOSE 8888
