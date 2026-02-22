@@ -80,7 +80,7 @@ resources:
 
 ## Pod security context
 podSecurityContext:
-  fsGroup: 100
+  fsGroup: 1000
 
 ## Container security context (for rootless Podman support)
 containerSecurityContext: {}

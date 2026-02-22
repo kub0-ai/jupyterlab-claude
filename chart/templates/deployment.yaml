@@ -110,8 +110,11 @@ spec:
                       cp /etc/podman-auth/auth.json /home/jovyan/.config/containers/auth.json
                     fi
                     {{- end }}
-          args:
-            - start-notebook.py
+          command:
+            - jupyter
+            - lab
+            - --ip=0.0.0.0
+            - --no-browser
             - --ServerApp.base_url={{ .Values.jupyter.baseUrl }}
             - --ServerApp.allow_origin={{ .Values.jupyter.allowOrigin }}
             - --ServerApp.trust_xheaders={{ .Values.jupyter.trustXheaders }}
