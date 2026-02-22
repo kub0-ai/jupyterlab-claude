@@ -2,8 +2,8 @@ apiVersion: v2
 name: jupyterlab-claude
 description: JupyterLab with Claude Code CLI and IPython magic integration
 type: application
-version: 0.2.0
-appVersion: "0.2.0"
+version: 0.2.1
+appVersion: "0.2.1"
 keywords:
   - jupyter
   - jupyterlab

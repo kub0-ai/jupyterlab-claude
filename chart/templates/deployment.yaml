@@ -27,6 +27,8 @@ spec:
           {{- if or .Values.containerSecurityContext .Values.podman.fuseOverlayfs }}
           securityContext:
             {{- if .Values.podman.fuseOverlayfs }}
+            appArmorProfile:
+              type: Unconfined
             capabilities:
               add:
                 - SYS_ADMIN
